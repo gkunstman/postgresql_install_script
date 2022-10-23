@@ -80,6 +80,7 @@ f_messages() {
     msg_1000008="Postgresql listen_addresses will be set for all IPV6 address [ $(f_terminal_font "success" "$3") ]"
     msg_1000009="How many IP addresses do you need to enter? \nPlease enter an integer value. \nFor Example: [ $(f_terminal_font "success" "2") ]"
     msg_1000010="Enter IP #$(f_terminal_font "success" "$3"): "
+    msg_1000011=$(f_terminal_font "success" "SUCCESS: ")$(f_terminal_font "success" "`whoami`")" is $(f_terminal_font "success" "root") or $(f_terminal_font "success" "sudo") user"
     # Errors
     error_prefix=$(f_terminal_font "error" "ERROR: [ $msg_code ] ")
     error_1000000=$error_prefix"This script must be run as root user or using sudo.""\nThe script is now exiting."
@@ -267,7 +268,7 @@ then
     f_messages error 1000000
     exit 0
 else
-    break
+    f_messages msg 1000011
 fi
 
 # Check OS and OS Version are supported
