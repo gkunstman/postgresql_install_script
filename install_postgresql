@@ -3,10 +3,13 @@
 # Variables
 supported_os=(Ubuntu) # Supported Operating Systems
 supported_ubuntu=(18.04 20.04 22.04) # Supported Ubuntu Versions
+psql_versions=(12 13 14 15) # Supported Postgresql Versions
+psql_listen_addresses_options=(0 1 2 3 4)
 mode="" # Mode to run script "Interactive" or "Command Line"
 input_psql_version="14" # Postgresql version to install
 input_psql_max_connections="100" # Postgresql value for "max_connections" parameter
 input_psql_shared_buffers="128" # Postgresql value for "shared_buffers" parameter
+input_psql_shared_buffers_unit="MB" # Postgresql storage unit value for "shared_buffers" parameter
 psql_listen_addresses_options="0" # Option [0-4] for setting postgresql "listen_addresses" parameter
 input_psql_port_num="5432" # Postgresql value for "port" parameter
 input_psql_listen_addresses_val="localhost" # Postgresql value for "listen_addresses" parameter. Default value is "localhost"
@@ -46,6 +49,52 @@ echoWarning() {
  
 echoError() {
     echo -e "${terminalColorError}$1${terminalColorClear}"
+}
+
+# Function to format terminal font for string
+f_terminal_font() {
+    font_type=$1
+    str_default=$terminalColorEmphasis$2$terminalColorClear
+    str_success=$terminalColorSuccess$2$terminalColorClear
+    str_message=$terminalColorMessage$2$terminalColorClear
+    str_warning=$terminalColorWarning$2$terminalColorClear
+    str_error=$terminalColorError$2$terminalColorClear
+    str_output="str_$font_type"
+    echo ${!str_output}
+}
+
+# Function for messages
+f_messages() {
+    response_type=$1
+    msg_code=$2
+    msg_output=$response_type"_"$msg_code
+    # Messages
+    msg_1000000="What version of postgresql do you want to install"
+    msg_1000001="Postgresql version [ $(f_terminal_font "success" "$3") ]"
+    msg_1000002="Enter an interger value for max_connections.  For Example: [ $(f_terminal_font "success" "128") ]\nCurrent value is [ $(f_terminal_font "success" "$input_psql_max_connections") ]"
+    msg_1000003="Set the listen_addresses variable for postgresql. \nEnter the interger value for one of the following options\n[ $(f_terminal_font "success" "0") ] All IP addresses\n[ $(f_terminal_font "success" "1") ] localhost\n[ $(f_terminal_font "success" "2") ] Any IPV4 address\n[ $(f_terminal_font "success" "3") ] Any IPV6 address\n[ $(f_terminal_font "success" "4") ] Manually enter IPV4/IPV6 addresses"
+    msg_1000004="Enter an interger value and storage unit for shared_buffers seperated by a space.  \nFor Example: [ $(f_terminal_font "success" "512 MB") ]\nCurrent value is [ $(f_terminal_font "success" "$3 $4") ]" 
+    msg_1000005="Postgresql listen_addresses will be set to any address [ $(f_terminal_font "success" "$3") ]"
+    msg_1000006="Postgresql listen_addresses will be set [ $(f_terminal_font "success" "$3") ]"
+    msg_1000007="Postgresql listen_addresses will be set for all IPV4 address [ $(f_terminal_font "success" "$3") ]"
+    msg_1000008="Postgresql listen_addresses will be set for all IPV6 address [ $(f_terminal_font "success" "$3") ]"
+    msg_1000009="How many IP addresses do you need to enter? \nPlease enter an integer value. \nFor Example: [ $(f_terminal_font "success" "2") ]"
+    msg_1000010="Enter IP #$(f_terminal_font "success" "$3"): "
+    # Errors
+    error_prefix=$(f_terminal_font "error" "ERROR: [ $msg_code ] ")
+    error_1000000=$error_prefix"This script must be run as root user or using sudo.""\nThe script is now exiting."
+    error_1000001=$error_prefix"$(f_terminal_font "warning" "$3") is not a supported version.  \nPlease enter one of the following versions and enter only the integer value:"
+    error_1000002=$error_prefix"$(f_terminal_font "warning" "$3") is not a valid value for max_connections."
+    error_1000003=$error_prefix"$(f_terminal_font "warning" "$3") is not a valid option.  Please enter the interger value for one of the following options:"
+    error_1000004=$error_prefix"$(f_terminal_font "warning" "$3 $4") is not a valid value for shared_buffers."
+    error_1000005=$error_prefix"$(f_terminal_font "warning" "$3") is not a valid storage unit. \nPlease use one of the following units: \n$(f_terminal_font "warning" "${valid_storage_units[*]}")"
+    error_1000006=$error_prefix"You must enter at least 1 IP address."
+    error_1000007=$error_prefix"$(f_terminal_font "warning" "$3") is not a valid value for number of IP addresses."
+    error_1000008=$error_prefix"$(f_terminal_font "warning" "$3") is not a valid IPV4/IPV6 address."
+    # Warnings
+
+    # Echo Message
+    echo -e ${!msg_output}
 }
 
 # Function to verify if value is an integer
@@ -96,6 +145,18 @@ f_array_as_del() {
   local IFS="$1"
   shift
   echo "$*"
+}
+# Function to check if unit is valid storage unit
+f_check_storage_unit() {
+    storage_unit=$1
+    valid_storage_units=(kiB KB MiB MB GiB GB)
+    if [[ ! " ${valid_storage_units[@]} " =~ " ${storage_unit} " ]];
+    then
+        f_messages error 1000005 $storage_unit
+        return 1
+    else
+        return 0
+    fi
 }
 
 # Function to check if OS and OS Version is supported
@@ -151,11 +212,47 @@ f_install_postgresql_ubuntu_2204() {
 
 # Function to modify postgresql config files
 f_update_postgresql_conf() {
+    # Input values
+    v_postgresql_file=$1
+    v_pg_hba_file=$2
+    v_psql_listen_addresses=$3
+    v_psql_port=$4
+    v_psql_max_connections=$5
+    v_psql_shared_buffers=$6
+    v_psql_shared_buffers_unit=$7
+    # String to replace
+    v_psql_list_addresses_tu="#listen_addresses ="
+    v_psql_port_tu="port ="
+    v_psql_max_connections_tu="max_connections ="
+    v_psql_shared_buffers_tu="shared_buffers ="
+    # String for config file
+    v_psql_list_addresses_str="listen_addresses = '$v_psql_listen_addresses'"
+    v_psql_port_str="port = $v_psql_port"
+    v_psql_max_connections_str="max_connections = $v_psql_max_connections"
+    v_psql_shared_buffers_str="shared_buffers = ""$v_psql_shared_buffers""$psql_shared_buffers_unit"
+
+
     # pg_hba.conf file
 
     # postgres.conf file
+    # Update listen_addresses parameter
+    sed -i "s|$v_psql_list_addresses_tu.*|$v_psql_list_addresses_str|" $v_postgresql_file
+    # Update port parameter
+    sed -i "s|$v_psql_port_tu.*|$v_psql_port_str|" $v_postgresql_file
+    # Update max_connection parameter
+    sed -i "s|$v_psql_max_connections_tu.*|$v_psql_max_connections_str|" $v_postgresql_file
+    # Update shared_buffers parameter
+    sed -i "s|$v_psql_shared_buffers_tu.*|$v_psql_shared_buffers_str|" $v_postgresql_file
 }
-
+# Function to check if user is root or sudo
+f_is_root() {
+    if [ `whoami` != root ]; 
+    then
+        return 1
+    else
+        return 0
+    fi
+}
 #########################
 # End Functions Section #
 #########################
@@ -165,9 +262,12 @@ postgresql_hba_conf_file=$(f_get_path_pg_hba_conf) # Path to postgresql pg_hba.c
 postgresql_conf_file=$(f_get_path_postgresql_conf) # Path to postgresql postgres.conf
 
 # Check if script is being run by root or sudo user
-if [ `whoami` != root ]; then
-    echoError "ERROR: This script must be run as root user or using sudo"
+if ! f_is_root;
+then
+    f_messages error 1000000
     exit 0
+else
+    break
 fi
 
 # Check OS and OS Version are supported
@@ -176,30 +276,30 @@ f_check_os
 # Get user input for project variables
 
 # Get Postgresql version to install
-psql_versions=(12 13 14 15)
-echo "What version of postgresql do you want to install"
+
+f_messages msg 1000000
 for version in ${psql_versions[*]}; do
-    echo "Version [ $version ]"
+    f_messages msg 1000001 $version
 done
 read input_psql_version
 while [[ ! " ${psql_versions[@]} " =~ " ${input_psql_version} " ]]; do
-    echo "$input_psql_version is not a supported version.  Please enter one of the following versions and enter only integer value"
+    f_messages error 1000001 $input_psql_version
     for version in ${psql_versions[*]}; do
-        echo "Version [ $version ]"
+        f_messages msg 1000001 $version
     done
     read input_psql_version
 done
 
 # Get user input for Postgresql configuration variables
-echo "Let's configure a few variables for postgresql..."
+
 # Get parameter value for [ max_connections ]
-echo "Enter an interger value for max_connections.  E.g. [ 128 ]"
+f_messages msg 1000002
 read input_psql_max_connections
 while true; do
     if ! f_verify_integer $input_psql_max_connections;
     then
-        echo "$input_psql_max_connections is not a valid value for max_connections..."
-        echo "Enter an interger value for max_connections.  E.g. [ 128 ]"
+        f_messages error 1000002 $input_psql_max_connections
+        f_messages msg 1000002
         read input_psql_max_connections
 
     else
@@ -208,14 +308,18 @@ while true; do
 done
 
 # Get parameter value for [ shared_buffers ]
-echo "Enter an interger value for shared_buffers in MB.  E.g. [ 512 ]"
-read input_psql_shared_buffers
+f_messages msg 1000004 $input_psql_shared_buffers $input_psql_shared_buffers_unit
+read input_psql_shared_buffers input_psql_shared_buffers_unit
 while true; do
     if ! f_verify_integer $input_psql_shared_buffers;
     then
-        echo "$input_psql_shared_buffers is not a valid value for shared_buffers..."
-        echo "Enter an interger value for shared_buffers.  E.g. [ 512 ]"
-        read input_psql_shared_buffers
+        f_messages error 1000004 $input_psql_shared_buffers $input_psql_shared_buffers_unit
+        f_messages msg 1000004 $input_psql_shared_buffers $input_psql_shared_buffers_unit
+        read input_psql_shared_buffers input_psql_shared_buffers_unit
+    elif ! f_check_storage_unit $input_psql_shared_buffers_unit;
+    then
+        f_messages msg 1000004 $input_psql_shared_buffers $input_psql_shared_buffers_unit
+        read input_psql_shared_buffers input_psql_shared_buffers_unit
     else
         break
     fi
@@ -223,67 +327,55 @@ done
 
 
 # Get parameter value for [ listen_addresses ]
-psql_listen_addresses_options=(0 1 2 3 4)
-echo "Set the listen_addresses variable for postgresql."
-echo "Enter the interger value for one of the following options..."
-echo "[ 0 ] All IP addresses"
-echo "[ 1 ] localhost"
-echo "[ 2 ] Any IPV4 address"
-echo "[ 3 ] Any IPV6 address"
-echo "[ 4 ] Manually enter IPV4/IPV6 addresses"
+f_messages msg 1000003
 read input_psql_listen_addresses
 
 while [[ ! " ${psql_listen_addresses_options[@]} " =~ " ${input_psql_listen_addresses} " ]]; do
-    echo "$input_psql_listen_addresses is not a valid option.  Please enter the interger value for one of the following options..."
-    echo "[ 0 ] All IP addresses"
-    echo "[ 1 ] localhost"
-    echo "[ 2 ] Any IPV4 address"
-    echo "[ 3 ] Any IPV6 address"
-    echo "[ 4 ] Manually enter IPV4/IPV6 addresses"
+    f_messages error 1000003 $input_psql_listen_addresses
+    f_messages msg 1000003
     read input_psql_listen_addresses
 done
 
 if [[ "$input_psql_listen_addresses" == 0 ]];
 then
     input_psql_listen_addresses_val="*"
-    echo "Postgresql listen_addresses will be set to any address [ $input_psql_listen_addresses_val ]"
+    f_messages msg 1000005 $input_psql_listen_addresses_val
 
 fi
 
 if [[ "$input_psql_listen_addresses" == 1 ]];
 then
     input_psql_listen_addresses_val="localhost"
-    echo "Postgresql listen_addresses will be set [ $input_psql_listen_addresses_val ]"   
+    f_messages msg 1000006 $input_psql_listen_addresses_val
 fi
 
 if [[ "$input_psql_listen_addresses" == 2 ]];
 then
     input_psql_listen_addresses_val="0.0.0.0"
-    echo "Postgresql listen_addresses will be set for all IPV4 address [ $input_psql_listen_addresses_val ]"
+    f_messages msg 1000007 $input_psql_listen_addresses_val
 fi
 
 if [[ "$input_psql_listen_addresses" == 3 ]];
 then
     input_psql_listen_addresses_val="::"
-    echo "Postgresql listen_addresses will be set for all IPV6 address [ $input_psql_listen_addresses_val ]"   
+    f_messages msg 1000008 $input_psql_listen_addresses_val
 fi
 
 if [[ "$input_psql_listen_addresses" == 4 ]];
 then
-    echo "How many IP addresses do you need to enter?"
-    echo "Please enter an integer value..."
+    f_messages msg 1000009
     read input_psql_listen_addresses_num_ips
 
     while true; do
         if ! f_verify_integer $input_psql_listen_addresses_num_ips;
         then
-            echo "$input_psql_listen_addresses_num_ips is not a valid value for number of IPs..."
-            echo "Enter an interger value for the number of IPs.  E.g. [ 2 ]"
+            f_messages error 1000007 $input_psql_listen_addresses_num_ips
+            f_messages msg 1000009
             read input_psql_listen_addresses_num_ips
         elif [ $input_psql_listen_addresses_num_ips -lt 1 ];
         then
-            echo "You must enter at least 1 IP address."
-            echo "Enter an interger value for the number of IPs.  E.g. [ 2 ]"
+            f_messages error 1000006
+            f_messages msg 1000009
             read input_psql_listen_addresses_num_ips
         else
             break
@@ -293,13 +385,13 @@ then
     i=$input_psql_listen_addresses_num_ips
     input_psql_listen_addresses_val_list=()
     while [ "$i" -le "$input_psql_listen_addresses_num_ips" ] && [ "$i" -ge 1 ]; do
-        echo "Enter IP #$i: "
+        f_messages msg 1000010 $i
         read input_psql_listen_addresses_val
         while true; do
             if ! f_valid_ipv4 $input_psql_listen_addresses_val;
             then
-                echo "$input_psql_listen_addresses_val is not a valid IPV4/IPV6 address..."
-                echo "Please enter a valid IPV4/IPV6 address..."
+                f_messages error 1000008 $input_psql_listen_addresses_val
+                f_messages msg 1000010 $i
                 read input_psql_listen_addresses_val
             else
                 break
@@ -313,11 +405,12 @@ fi
 
 
 
-echo ""
-echo "Summary:"
+echo "###########"
+echo "# Summary #"
+echo "###########"
 echo "This script will install Postgresql version [ $input_psql_version ]"
 echo "Postgresql max_connections parameter will be set to [ $input_psql_max_connections ]"
-echo "Postgresql shared_buffers parameter will be set to [ $input_psql_shared_buffers ]"
+echo "Postgresql shared_buffers parameter will be set to [ $input_psql_shared_buffers$input_psql_shared_buffers_unit ]"
 if [[ "$input_psql_listen_addresses" != 4 ]];
 then
     echo "Postgresql listen_addresses parameter will be set to [ $input_psql_listen_addresses_val ]"
@@ -325,5 +418,4 @@ else
     echo "Postgresql listen_addresses parameter will be set to [ $input_psql_listen_addresses_val_list_csv ]"
 fi
 
-echo "$postgresql_hba_conf_file"
-echo "$postgresql_conf_file"
+
