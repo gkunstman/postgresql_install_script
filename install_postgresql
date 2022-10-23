@@ -81,6 +81,7 @@ f_messages() {
     msg_1000009="How many IP addresses do you need to enter? \nPlease enter an integer value. \nFor Example: [ $(f_terminal_font "success" "2") ]"
     msg_1000010="Enter IP #$(f_terminal_font "success" "$3"): "
     msg_1000011=$(f_terminal_font "success" "SUCCESS: ")$(f_terminal_font "success" "`whoami`")" is $(f_terminal_font "success" "root") or $(f_terminal_font "success" "sudo") user"
+    msg_1000012=$(f_terminal_font "success" "SUCCESS: ")"$(f_terminal_font "success" "$NAME ")$(f_terminal_font "success" "$VERSION_ID") is supported by this script"
     # Errors
     error_prefix=$(f_terminal_font "error" "ERROR: [ $msg_code ] ")
     error_1000000=$error_prefix"This script must be run as root user or using sudo.""\nThe script is now exiting."
@@ -92,6 +93,8 @@ f_messages() {
     error_1000006=$error_prefix"You must enter at least 1 IP address."
     error_1000007=$error_prefix"$(f_terminal_font "warning" "$3") is not a valid value for number of IP addresses."
     error_1000008=$error_prefix"$(f_terminal_font "warning" "$3") is not a valid IPV4/IPV6 address."
+    error_1000009=$error_prefix"$(f_terminal_font "error" "$3") is not a supported Operating System by this script."
+    error_1000010=$error_prefix"$(f_terminal_font "success" "$3") version $(f_terminal_font "error" "$4") is not supported by this script. \nOS: $(f_terminal_font "success" "$3") \n Version: $(f_terminal_font "error" "$4") \nExiting script."
     # Warnings
 
     # Echo Message
@@ -166,7 +169,7 @@ f_check_os() {
     os_version=$VERSION_ID
     if [[ ! " ${supported_os[@]} " =~ " ${os_name} " ]];
     then
-        echoError "ERROR: $NAME is not a supported Operating System by this script."
+        f_messages error 1000009 $NAME
         return 1
     else
         # Check Ubuntu Version
@@ -174,15 +177,11 @@ f_check_os() {
         then
             if [[ ! " ${supported_ubuntu[@]} " =~ " ${os_version} " ]];
             then
-                echoError "$NAME version $VERSION_ID is not supported by this script"
-                echoError "Exiting script."
-                echoMessage "OS: $NAME"
-                echoMessage "Version: $VERSION_ID"
-                echoMessage "Exiting script."
+                f_messages error 1000010 $NAME $VERSION_ID
                 return 2
                 exit 0
             else
-                echoSuccess "SUCCESS: $Name $VERSION_ID is supported by this script"
+                f_messages msg 1000012 $NAME $VERSION_ID
                 return 0
             fi
         fi
