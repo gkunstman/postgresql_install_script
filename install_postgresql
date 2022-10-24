@@ -109,6 +109,17 @@ f_messages() {
     error_1000009=$error_prefix"$(f_terminal_font "error" "$3") is not a supported Operating System by this script."
     error_1000010=$error_prefix"$(f_terminal_font "success" "$3") version $(f_terminal_font "error" "$4") is not supported by this script. \nOS: $(f_terminal_font "success" "$3") \n Version: $(f_terminal_font "error" "$4") \nExiting script."
     # Warnings
+    # Help Messages
+    help_tab="        "
+    help_prefix=$(f_terminal_font "success" "$3")$help_tab
+    help_desc=$(f_terminal_font "message" "Description: ")
+    help_syntax=$help_tab$(f_terminal_font "message" "Syntax: ")
+    help_1000000="This script will install and configure preferred postgresql version on variety of Linux distros.\n\nOptions:"
+    help_1000001=$help_prefix"$help_desc This option does not take any values and will simply run the script in interactive mode.\n$help_syntax -m"
+    help_1000002=$help_prefix"$help_desc This options sets the value for postgresql version.  This option accepts a single value as an integer.\n$help_syntax -b 14"
+    help_1000003=$help_prefix"$help_desc This options sets the value for postgresql max_connections parameter.  This option accepts a single value as an integer.\n$help_syntax -c 100"
+    help_1000004=$help_prefix"$help_desc This options sets the value for postgresql shared_buffers parameter.  This option accepts two values separated by a space.  The first value is an integer and the second is the storage unit: KiB,KB,MiB,MB,GiB, or GB.\n$help_syntax -d 128 MB"
+    help_1000005=$help_prefix"$help_desc This options sets the value for postgresql listen_addresses parameter.  This option accepts a single value as an integer [0-4]\n$help_tab[ 0 ] will set value to '*'\n$help_tab[ 1 ] will set value to 'localhost'\n$helptab[ 2 ] will set value to '0.0.0.0'\n[ 3 ] will set value to '::'\n[ 4 ] will allow for multiple comma separated address values using -h option.\n$help_syntax -e 0\n$help_syntax -e 1\n$help_syntax -e 2\n$help_syntax -e 3\n$help_syntax -e 4 -h \"1.2.3.4,5.6.7.8\""
 
     # Echo Message
     echo -e ${!msg_output}
@@ -302,6 +313,18 @@ f_is_root() {
         return 0
     fi
 }
+############################
+# Script Options Functions #
+############################
+option_help() {
+    f_messages help 1000000
+    f_messages help 1000001 "-i"
+    f_messages help 1000002 "-b"
+    f_messages help 1000003 "-c"
+    f_messages help 1000004 "-d"
+    f_messages help 1000005 "-e"
+ 
+}
 #########################
 # End Functions Section #
 #########################
@@ -488,3 +511,4 @@ then
 else
     echo "Postgresql listen_addresses parameter will be set to [ $input_psql_listen_addresses_val_list_csv ]"
 fi
+option_help
