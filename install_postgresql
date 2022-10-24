@@ -1,18 +1,31 @@
 #!/bin/bash
 
+###############################
 # Variables
+###############################
+# Default Values
+###############################
+input_psql_version_default="14"
+input_psql_max_connections_default="100"
+input_psql_shared_buffers_default="128"
+input_psql_shared_buffers_unit_default="MB"
+psql_listen_addresses_options_default="0"
+input_psql_port_num_default="5432"
+input_psql_listen_addresses_val_default="localhost"
+###############################
 supported_os=(Ubuntu) # Supported Operating Systems
 supported_ubuntu=(18.04 20.04 22.04) # Supported Ubuntu Versions
 psql_versions=(12 13 14 15) # Supported Postgresql Versions
 psql_listen_addresses_options=(0 1 2 3 4)
 mode="" # Mode to run script "Interactive" or "Command Line"
-input_psql_version="14" # Postgresql version to install
-input_psql_max_connections="100" # Postgresql value for "max_connections" parameter
-input_psql_shared_buffers="128" # Postgresql value for "shared_buffers" parameter
-input_psql_shared_buffers_unit="MB" # Postgresql storage unit value for "shared_buffers" parameter
-psql_listen_addresses_options="0" # Option [0-4] for setting postgresql "listen_addresses" parameter
-input_psql_port_num="5432" # Postgresql value for "port" parameter
-input_psql_listen_addresses_val="localhost" # Postgresql value for "listen_addresses" parameter. Default value is "localhost"
+###############################
+input_psql_version="$input_psql_version_default" # Postgresql version to install
+input_psql_max_connections="$input_psql_max_connections_default" # Postgresql value for "max_connections" parameter
+input_psql_shared_buffers="$input_psql_shared_buffers_default" # Postgresql value for "shared_buffers" parameter
+input_psql_shared_buffers_unit="$input_psql_shared_buffers_unit_default" # Postgresql storage unit value for "shared_buffers" parameter
+psql_listen_addresses_options="$psql_listen_addresses_options_default" # Option [0-4] for setting postgresql "listen_addresses" parameter
+input_psql_port_num="$input_psql_port_num_default" # Postgresql value for "port" parameter
+input_psql_listen_addresses_val="$input_psql_listen_addresses_val_default" # Postgresql value for "listen_addresses" parameter. Default value is "localhost"
 input_psql_listen_addresses_val_list_csv=() # Postgresql value for "listen_addresses" parameter if passing multiple IP entries
 
 # Echo Messages
@@ -101,32 +114,68 @@ f_messages() {
     echo -e ${!msg_output}
 }
 
+# Function to get total installed system memory
+f_get_sys_mem() {
+    grep MemTotal /proc/meminfo | awk '{print $2}'
+}
+
+# Function to check if variable is null
+f_is_var_null() {
+    [[ -z "${1}" || "${1}" = "null" ]] && return 0 || return 1
+}
+
 # Function to verify if value is an integer
 f_verify_integer() {
-    arg1=$1
-    echo "$arg1"|grep "^[0-9]*$"
-    arg1="$?"
-    if [[ $arg1 == 0 ]]
-    then
+    declare re='^[+-]?[0-9]+$'
+    if [[ ${1} =~ $re ]]; then
         return 0
-    else
-        return 1
     fi
+    return 1
+}
+
+# Function to validate string contains only alpha-numeric characters, underscores, and dashes
+f_is_alpha_num_ud() {
+    [[ $# = 0 ]] && printf "%s: Missing arguments\n" "${FUNCNAME[0]}" && return 2
+
+    declare re='^[[:alpha:]_-]+$'
+    if [[ "${1}" =~ $re ]]; then
+        return 0
+    fi
+    return 1
 }
 
 # Function to check if string is valid IPV4 address
-f_valid_ipv4()
+f_is_valid_ipv4()
 {
-    ip=${1:-1.2.3.4}
+    [[ $# = 0 ]] && printf "%s: Missing arguments\n" "${FUNCNAME[0]}" && return 2
+    declare ip="${1}"
+    declare IFS=.
+    # shellcheck disable=SC2206
+    declare -a a=($ip)
+    [[ "${ip}" =~ ^[0-9]+(\.[0-9]+){3}$ ]] || return 1
+    # Test values of quads
+    declare quad
+    for quad in {0..3}; do
+        [[ "${a[$quad]}" -gt 255 ]] && return 1
+    done
+    return 0
+}
 
-    re='^(0*(1?[0-9]{1,2}|2([0-4][0-9]|5[0-5]))\.){3}'
-    re+='0*(1?[0-9]{1,2}|2([‌​0-4][0-9]|5[0-5]))$'
+# Function to check if string is valid IPV6 address
+f_is_valid_ipv6() {
+    [[ $# = 0 ]] && printf "%s: Missing arguments\n" "${FUNCNAME[0]}" && return 2
 
-    if [[ $ip =~ $re ]]; then
-        return 0
-    else
-        return 1
-    fi
+    declare ip="${1}"
+    declare re="^(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|\
+([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|\
+([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|\
+([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|\
+:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|\
+::(ffff(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|\
+(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|\
+(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))$"
+
+    [[ "${ip}" =~ $re ]] && return 0 || return 1
 }
 
 # Function to check if string is a FQDN
@@ -154,7 +203,7 @@ f_array_as_del() {
 f_check_storage_unit() {
     storage_unit=$1
     valid_storage_units=(kiB KB MiB MB GiB GB)
-    if [[ ! " ${valid_storage_units[@]} " =~ " ${storage_unit} " ]];
+    if [[ ! " ${valid_storage_units[@]} " =~ " ${storage_unit} " ]] && ! f_is_var_null $storage_unit ;
     then
         f_messages error 1000005 $storage_unit
         return 1
@@ -282,13 +331,19 @@ for version in ${psql_versions[*]}; do
     f_messages msg 1000001 $version
 done
 read input_psql_version
-while [[ ! " ${psql_versions[@]} " =~ " ${input_psql_version} " ]]; do
+while [[ ! " ${psql_versions[@]} " =~ " ${input_psql_version} " ]] && [ ! f_is_var_null $input_psql_version ]; 
+    do
     f_messages error 1000001 $input_psql_version
     for version in ${psql_versions[*]}; do
         f_messages msg 1000001 $version
     done
     read input_psql_version
 done
+# If input_psql_version is 'null' then set default value
+if f_is_var_null $input_psql_version;
+then
+    input_psql_version=$input_psql_version_default
+fi
 
 # Get user input for Postgresql configuration variables
 
@@ -296,7 +351,7 @@ done
 f_messages msg 1000002
 read input_psql_max_connections
 while true; do
-    if ! f_verify_integer $input_psql_max_connections;
+    if ! f_verify_integer $input_psql_max_connections && [ ! f_is_var_null $input_psql_max_connections ];
     then
         f_messages error 1000002 $input_psql_max_connections
         f_messages msg 1000002
@@ -306,20 +361,31 @@ while true; do
         break
     fi
 done
+# If input_psql_max_connections is 'null' then set default value
+if f_is_var_null $input_psql_max_connections;
+then
+    input_psql_max_connections=$input_psql_max_connections_default
+fi
 
 # Get parameter value for [ shared_buffers ]
 f_messages msg 1000004 $input_psql_shared_buffers $input_psql_shared_buffers_unit
 read input_psql_shared_buffers input_psql_shared_buffers_unit
 while true; do
-    if ! f_verify_integer $input_psql_shared_buffers;
+    if ! f_verify_integer $input_psql_shared_buffers && ! f_is_var_null $input_psql_shared_buffers;
     then
         f_messages error 1000004 $input_psql_shared_buffers $input_psql_shared_buffers_unit
         f_messages msg 1000004 $input_psql_shared_buffers $input_psql_shared_buffers_unit
         read input_psql_shared_buffers input_psql_shared_buffers_unit
-    elif ! f_check_storage_unit $input_psql_shared_buffers_unit;
+    elif ! f_check_storage_unit $input_psql_shared_buffers_unit && ! f_is_var_null $input_psql_shared_buffers_unit;
     then
         f_messages msg 1000004 $input_psql_shared_buffers $input_psql_shared_buffers_unit
         read input_psql_shared_buffers input_psql_shared_buffers_unit
+    elif f_is_var_null $input_psql_shared_buffers;
+    then
+        input_psql_shared_buffers="$input_psql_shared_buffers_default"
+    elif f_is_var_null $input_psql_shared_buffers_unit;
+    then
+        input_psql_shared_buffers_unit="$input_psql_shared_buffers_unit_default"
     else
         break
     fi
@@ -388,11 +454,16 @@ then
         f_messages msg 1000010 $i
         read input_psql_listen_addresses_val
         while true; do
-            if ! f_valid_ipv4 $input_psql_listen_addresses_val;
+            if ! f_is_valid_ipv4 $input_psql_listen_addresses_val;
             then
-                f_messages error 1000008 $input_psql_listen_addresses_val
-                f_messages msg 1000010 $i
-                read input_psql_listen_addresses_val
+                if ! f_is_valid_ipv6 $input_psql_listen_addresses_val;
+                then
+                    f_messages error 1000008 $input_psql_listen_addresses_val
+                    f_messages msg 1000010 $i
+                    read input_psql_listen_addresses_val
+                else
+                    break
+                fi
             else
                 break
             fi
@@ -417,5 +488,3 @@ then
 else
     echo "Postgresql listen_addresses parameter will be set to [ $input_psql_listen_addresses_val_list_csv ]"
 fi
-
-
