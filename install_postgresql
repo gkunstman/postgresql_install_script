@@ -9,12 +9,13 @@ input_psql_version_default="14"
 input_psql_max_connections_default="100"
 input_psql_shared_buffers_default="128"
 input_psql_shared_buffers_unit_default="MB"
-psql_listen_addresses_options_default="0"
+psql_listen_addresses_options_default="1"
 input_psql_port_num_default="5432"
 input_psql_listen_addresses_val_default="localhost"
 ###############################
-supported_os=(Ubuntu) # Supported Operating Systems
-supported_ubuntu=(18.04 20.04 22.04) # Supported Ubuntu Versions
+supported_os=(CentOS Ubuntu) # Supported Operating Systems
+supported_Ubuntu=(18.04 20.04 22.04) # Supported Ubuntu Versions
+supported_CentOS=(1 2 3)
 psql_versions=(12 13 14 15) # Supported Postgresql Versions
 psql_listen_addresses_options=(0 1 2 3 4)
 mode="" # Mode to run script "Interactive" or "Command Line"
@@ -43,26 +44,6 @@ terminalColorWarning='\033[1;34m'
 # Start Functions Section #
 ###########################
 
-# Terminal Fonts 
-echoDefault() {
-    echo -e "${terminalColorClear}$1${terminalColorClear}"
-}
-
-echoSuccess() {
-    echo -e "${terminalColorSuccess}$1${terminalColorClear}"
-}
-
-echoMessage() {
-    echo -e "${terminalColorMessage}$1${terminalColorClear}"
-}
- 
-echoWarning() {
-    echo -e "${terminalColorWarning}$1${terminalColorClear}"
-}
- 
-echoError() {
-    echo -e "${terminalColorError}$1${terminalColorClear}"
-}
 
 # Function to format terminal font for string
 f_terminal_font() {
@@ -81,20 +62,24 @@ f_messages() {
     response_type=$1
     msg_code=$2
     msg_output=$response_type"_"$msg_code
+    msg_tab='\t\t'
+    msg_nl="\n$msg_tab"
     # Messages
-    msg_1000000="What version of postgresql do you want to install"
-    msg_1000001="Postgresql version [ $(f_terminal_font "success" "$3") ]"
-    msg_1000002="Enter an interger value for max_connections.  For Example: [ $(f_terminal_font "success" "128") ]\nCurrent value is [ $(f_terminal_font "success" "$input_psql_max_connections") ]"
-    msg_1000003="Set the listen_addresses variable for postgresql. \nEnter the interger value for one of the following options\n[ $(f_terminal_font "success" "0") ] All IP addresses\n[ $(f_terminal_font "success" "1") ] localhost\n[ $(f_terminal_font "success" "2") ] Any IPV4 address\n[ $(f_terminal_font "success" "3") ] Any IPV6 address\n[ $(f_terminal_font "success" "4") ] Manually enter IPV4/IPV6 addresses"
-    msg_1000004="Enter an interger value and storage unit for shared_buffers seperated by a space.  \nFor Example: [ $(f_terminal_font "success" "512 MB") ]\nCurrent value is [ $(f_terminal_font "success" "$3 $4") ]" 
+    msg_1000000="What version of postgresql do you want to install?\nEnter version as an integer value or press enter to use Default value.${msg_nl}Default: [ $(f_terminal_font "message" "${3}") ]"
+    msg_1000001="${msg_tab}Postgresql version [ $(f_terminal_font "success" "${3}") ]"
+    msg_1000002="Enter an interger value for max_connections or press enter to use Default value.${msg_nl}Example: [ $(f_terminal_font "success" "${3}") ]${msg_nl}Default value: [ $(f_terminal_font "success" "${3}") ]"
+    msg_1000003="Set the listen_addresses variable for postgresql. \nEnter the interger value for one of the following options or press enter to use Default value:${msg_nl}[ $(f_terminal_font "success" "0") ] All IP addresses${msg_nl}[ $(f_terminal_font "success" "1") ] localhost${msg_nl}[ $(f_terminal_font "success" "2") ] Any IPV4 address${msg_nl}[ $(f_terminal_font "success" "3") ] Any IPV6 address${msg_nl}[ $(f_terminal_font "success" "4") ] Manually enter IPV4/IPV6 addresses${msg_nl}Default: [ $(f_terminal_font "success" "${3}") ]"
+    msg_1000004="Enter an interger value and storage unit for shared_buffers seperated by a space or press enter to use Default value.${msg_nl}Example: [ $(f_terminal_font "success" "${5} ${6}") ]${msg_nl}Default value: [ $(f_terminal_font "success" "$3 $4") ]" 
     msg_1000005="Postgresql listen_addresses will be set to any address [ $(f_terminal_font "success" "$3") ]"
     msg_1000006="Postgresql listen_addresses will be set [ $(f_terminal_font "success" "$3") ]"
     msg_1000007="Postgresql listen_addresses will be set for all IPV4 address [ $(f_terminal_font "success" "$3") ]"
     msg_1000008="Postgresql listen_addresses will be set for all IPV6 address [ $(f_terminal_font "success" "$3") ]"
     msg_1000009="How many IP addresses do you need to enter? \nPlease enter an integer value. \nFor Example: [ $(f_terminal_font "success" "2") ]"
     msg_1000010="Enter IP #$(f_terminal_font "success" "$3"): "
-    msg_1000011=$(f_terminal_font "success" "SUCCESS: ")$(f_terminal_font "success" "`whoami`")" is $(f_terminal_font "success" "root") or $(f_terminal_font "success" "sudo") user"
+    msg_1000011=$(f_terminal_font "success" "SUCCESS: ")$(f_terminal_font "success" "$(whoami)")" is $(f_terminal_font "success" "root") or $(f_terminal_font "success" "sudo") user"
     msg_1000012=$(f_terminal_font "success" "SUCCESS: ")"$(f_terminal_font "success" "$NAME ")$(f_terminal_font "success" "$VERSION_ID") is supported by this script"
+    msg_1000013="$(f_terminal_font "message" "Supported Operating Systems: ")$(f_terminal_font "success" "${msg_nl}${3}")"
+    msg_1000014="${msg_nl}${msg_tab}$(f_terminal_font "message" "Release: ")$(f_terminal_font "success" "${3}")"
     # Errors
     error_prefix=$(f_terminal_font "error" "ERROR: [ $msg_code ] ")
     error_1000000=$error_prefix"This script must be run as root user or using sudo.""\nThe script is now exiting."
@@ -108,18 +93,23 @@ f_messages() {
     error_1000008=$error_prefix"$(f_terminal_font "warning" "$3") is not a valid IPV4/IPV6 address."
     error_1000009=$error_prefix"$(f_terminal_font "error" "$3") is not a supported Operating System by this script."
     error_1000010=$error_prefix"$(f_terminal_font "success" "$3") version $(f_terminal_font "error" "$4") is not supported by this script. \nOS: $(f_terminal_font "success" "$3") \n Version: $(f_terminal_font "error" "$4") \nExiting script."
+    error_1000011=$error_prefix"An existing installed version of Postgresql was detected.\n${3}\nPlease uninstall current instance of Postgresql and rerun this script.\nExiting script."
     # Warnings
     # Help Messages
-    help_tab="        "
-    help_prefix=$(f_terminal_font "success" "$3")$help_tab
-    help_desc=$(f_terminal_font "message" "Description: ")
-    help_syntax=$help_tab$(f_terminal_font "message" "Syntax: ")
+    help_prefix="\n"$(f_terminal_font "success" "$3")
+    help_desc=$msg_tab$(f_terminal_font "message" "Description: ")
+    help_syntax=$(f_terminal_font "message" "Syntax: ")
     help_1000000="This script will install and configure preferred postgresql version on variety of Linux distros.\n\nOptions:"
-    help_1000001=$help_prefix"$help_desc This option does not take any values and will simply run the script in interactive mode.\n$help_syntax -m"
-    help_1000002=$help_prefix"$help_desc This options sets the value for postgresql version.  This option accepts a single value as an integer.\n$help_syntax -b 14"
-    help_1000003=$help_prefix"$help_desc This options sets the value for postgresql max_connections parameter.  This option accepts a single value as an integer.\n$help_syntax -c 100"
-    help_1000004=$help_prefix"$help_desc This options sets the value for postgresql shared_buffers parameter.  This option accepts two values separated by a space.  The first value is an integer and the second is the storage unit: KiB,KB,MiB,MB,GiB, or GB.\n$help_syntax -d 128 MB"
-    help_1000005=$help_prefix"$help_desc This options sets the value for postgresql listen_addresses parameter.  This option accepts a single value as an integer [0-4]\n$help_tab[ 0 ] will set value to '*'\n$help_tab[ 1 ] will set value to 'localhost'\n$helptab[ 2 ] will set value to '0.0.0.0'\n[ 3 ] will set value to '::'\n[ 4 ] will allow for multiple comma separated address values using -h option.\n$help_syntax -e 0\n$help_syntax -e 1\n$help_syntax -e 2\n$help_syntax -e 3\n$help_syntax -e 4 -h \"1.2.3.4,5.6.7.8\""
+    help_1000001=$help_prefix"$help_desc This option does not take any values and will simply run the script in interactive mode.$msg_nl$help_syntax $3"
+    help_1000002=$help_prefix"$help_desc This options sets the value for postgresql version.  This option accepts a single value as an integer.$msg_nl$help_syntax $3 14"
+    help_1000003=$help_prefix"$help_desc This options sets the value for postgresql max_connections parameter.  This option accepts a single value as an integer.$msg_nl$help_syntax $3 100"
+    help_1000004=$help_prefix"$help_desc This options sets the value for postgresql shared_buffers parameter.  This option accepts two values separated by a space.  The first value is an integer and the second is the storage unit: KiB,KB,MiB,MB,GiB, or GB.$msg_nl$help_syntax $3 128 MB"
+    help_1000005=$help_prefix"$help_desc This optoin sets the value for postgresql port parameter.  This option accepts a single value as an integer.$msg_nl$help_syntax $3 5433"
+    help_1000006=$help_prefix"$help_desc This options sets the value for postgresql listen_addresses parameter.  This option accepts a single value as an integer [0-4]:$msg_nl[ 0 ] will set value to '*'$msg_nl[ 1 ] will set value to 'localhost'$msg_nl[ 2 ] will set value to '0.0.0.0'$msg_nl[ 3 ] will set value to '::'$msg_nl[ 4 ] will allow for one or multiple comma separated IPV4/IPV6 address values using $4 option.$msg_nl$help_syntax $3 0$msg_nl$help_syntax $3 1$msg_nl$help_syntax $3 2$msg_nl$help_syntax $3 3$msg_nl$help_syntax $3 4 $4 \"1.2.3.4,5.6.7.8\""
+    help_1000007=$help_prefix"$help_desc This options sets custom value for postgresql list_addreses parameter.  This option is used with the $4 option with a value of \"4\". You can specifiy one or multiple IPV4/IPV6 addresses.  Each address needs to be seperated by a comma.$msg_nl$help_syntax $4 4 $3 \"192.168.4.1\"$msg_nl$helpsyntax $4 4 $3 \"192.168.4.1,fe80::1ff:fe23:4567:890a\""
+    help_1000008=$help_prefix"$help_desc This option displays the help text.$msg_nl$help_syntax $3"
+    help_1000009=$help_prefix"$help_desc This option will display all postgresql versions supported by this script.$msg_nl$help_syntax $3"
+    help_1000010=$help_prefix"$help_desc This option will display all operating systems and versions versions supported by this script.$msg_nl$help_syntax $3"
 
     # Echo Message
     echo -e ${!msg_output}
@@ -222,6 +212,20 @@ f_check_storage_unit() {
         return 0
     fi
 }
+f_check_is_psql_installed() {
+    check_is_psql_installed=$(which psql)
+    if f_is_var_null $check_is_psql_installed;
+    then
+        return 1
+    else
+        return 0
+    fi
+}
+
+f_get_psql_version() {
+    get_psql_installed=$(psql -V)
+    echo $get_psql_installed
+}
 
 # Function to check if OS and OS Version is supported
 f_check_os() {
@@ -235,11 +239,10 @@ f_check_os() {
         # Check Ubuntu Version
         if [[ " ${supported_os[@]} " =~ "Ubuntu" ]]
         then
-            if [[ ! " ${supported_ubuntu[@]} " =~ " ${os_version} " ]];
+            if [[ ! " ${supported_Ubuntu[@]} " =~ " ${os_version} " ]];
             then
                 f_messages error 1000010 $NAME $VERSION_ID
                 return 2
-                exit 0
             else
                 f_messages msg 1000012 $NAME $VERSION_ID
                 return 0
@@ -247,6 +250,7 @@ f_check_os() {
         fi
     fi
 }
+
 
 # Get path to postgresql pg_hba.conf file
 f_get_path_pg_hba_conf() {
@@ -306,25 +310,45 @@ f_update_postgresql_conf() {
 }
 # Function to check if user is root or sudo
 f_is_root() {
-    if [ `whoami` != root ]; 
+    if [ $(whoami) != root ]; 
     then
         return 1
     else
         return 0
     fi
 }
+
+# Function to get a list of OS Versions supported by this script
+f_help_supported_os_list() {
+    
+    for os in ${supported_os[@]}; do
+        os_version_lu="supported_"$os[@]
+        os_version_lu_var=${!os_version_lu}
+        f_messages msg 1000013 $os
+
+        for version in ${os_version_lu_var[@]}; do
+            f_messages msg 1000014 $version
+        done
+    done
+}
+
 ############################
 # Script Options Functions #
 ############################
 option_help() {
     f_messages help 1000000
-    f_messages help 1000001 "-i"
     f_messages help 1000002 "-b"
     f_messages help 1000003 "-c"
     f_messages help 1000004 "-d"
     f_messages help 1000005 "-e"
- 
+    f_messages help 1000006 "-g" "-j"
+    f_messages help 1000008 "-h"
+    f_messages help 1000001 "-i"
+    f_messages help 1000007 "-j" "-g"
+    f_messages help 1000009 "-k"
+    f_messages help 1000010 "-l"
 }
+
 #########################
 # End Functions Section #
 #########################
@@ -343,18 +367,28 @@ else
 fi
 
 # Check OS and OS Version are supported
-f_check_os
+if ! f_check_os;
+then
+    exit 0
+fi
+
+# Check to see if PSQL is already installed
+#if f_check_is_psql_installed;
+#then
+#    f_messages error 1000011 "$(f_get_psql_version)"
+#    exit 0
+#fi
 
 # Get user input for project variables
 
 # Get Postgresql version to install
 
-f_messages msg 1000000
+f_messages msg 1000000 $input_psql_version_default
 for version in ${psql_versions[*]}; do
-    f_messages msg 1000001 $version
+    f_messages msg 1000001 $version $input_psql_version_default
 done
 read input_psql_version
-while [[ ! " ${psql_versions[@]} " =~ " ${input_psql_version} " ]] && [ ! f_is_var_null $input_psql_version ]; 
+while [[ ! " ${psql_versions[@]} " =~ " ${input_psql_version} " ]] && ! f_is_var_null $input_psql_version ; 
     do
     f_messages error 1000001 $input_psql_version
     for version in ${psql_versions[*]}; do
@@ -371,13 +405,14 @@ fi
 # Get user input for Postgresql configuration variables
 
 # Get parameter value for [ max_connections ]
-f_messages msg 1000002
+max_connections_msg_args="msg 1000002 $input_psql_max_connections_default $input_psql_max_connections"
+f_messages $max_connections_msg_args
 read input_psql_max_connections
 while true; do
-    if ! f_verify_integer $input_psql_max_connections && [ ! f_is_var_null $input_psql_max_connections ];
+    if ! f_verify_integer $input_psql_max_connections && ! f_is_var_null $input_psql_max_connections ;
     then
         f_messages error 1000002 $input_psql_max_connections
-        f_messages msg 1000002
+        f_messages $max_connections_msg_args
         read input_psql_max_connections
 
     else
@@ -391,17 +426,18 @@ then
 fi
 
 # Get parameter value for [ shared_buffers ]
-f_messages msg 1000004 $input_psql_shared_buffers $input_psql_shared_buffers_unit
+shared_buffers_msg_args="msg 1000004 $input_psql_shared_buffers $input_psql_shared_buffers_unit $input_psql_shared_buffers_default $input_psql_shared_buffers_unit_default"
+f_messages $shared_buffers_msg_args
 read input_psql_shared_buffers input_psql_shared_buffers_unit
 while true; do
     if ! f_verify_integer $input_psql_shared_buffers && ! f_is_var_null $input_psql_shared_buffers;
     then
         f_messages error 1000004 $input_psql_shared_buffers $input_psql_shared_buffers_unit
-        f_messages msg 1000004 $input_psql_shared_buffers $input_psql_shared_buffers_unit
+        f_messages $shared_buffers_msg_args
         read input_psql_shared_buffers input_psql_shared_buffers_unit
     elif ! f_check_storage_unit $input_psql_shared_buffers_unit && ! f_is_var_null $input_psql_shared_buffers_unit;
     then
-        f_messages msg 1000004 $input_psql_shared_buffers $input_psql_shared_buffers_unit
+        f_messages $shared_buffers_msg_args
         read input_psql_shared_buffers input_psql_shared_buffers_unit
     elif f_is_var_null $input_psql_shared_buffers;
     then
@@ -416,14 +452,20 @@ done
 
 
 # Get parameter value for [ listen_addresses ]
-f_messages msg 1000003
+f_messages msg 1000003 $psql_listen_addresses_options_default
 read input_psql_listen_addresses
 
-while [[ ! " ${psql_listen_addresses_options[@]} " =~ " ${input_psql_listen_addresses} " ]]; do
+while [[ ! " ${psql_listen_addresses_options[@]} " =~ " ${input_psql_listen_addresses} " ]] && ! f_is_var_null $input_psql_listen_addresses; do
     f_messages error 1000003 $input_psql_listen_addresses
-    f_messages msg 1000003
+    f_messages msg 1000003 $psql_listen_addresses_options_default
     read input_psql_listen_addresses
 done
+
+if f_is_var_null $input_psql_listen_addresses;
+then
+    input_psql_listen_addresses=$psql_listen_addresses_options_default
+
+fi
 
 if [[ "$input_psql_listen_addresses" == 0 ]];
 then
@@ -511,4 +553,6 @@ then
 else
     echo "Postgresql listen_addresses parameter will be set to [ $input_psql_listen_addresses_val_list_csv ]"
 fi
-option_help
+
+
+
