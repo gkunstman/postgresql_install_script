@@ -1,5 +1,12 @@
 #!/bin/bash
 
+# Function to get operating system details
+f_get_os_info() {
+    . /etc/os-release 
+}
+# Load info for operating system
+f_get_os_info
+
 ###############################
 # Variables                   #
 ###############################
@@ -28,13 +35,15 @@ input_psql_listen_addresses_num_ips=$psql_listen_addresses_num_ips_default # Num
 input_psql_listen_addresses_val="$psql_listen_addresses_val_default" # Postgresql value for "listen_addresses" parameter. Default value is "localhost"
 input_psql_listen_addresses_val_list_csv=() # Postgresql value for "listen_addresses" parameter if passing multiple IP entries
 ###############################
-# Default Values              #
+# Program Values              #
 ###############################
 supported_os=(CentOS Ubuntu) # Supported Operating Systems
 supported_Ubuntu=(18.04 20.04 22.04) # Supported Ubuntu Versions
 supported_CentOS=(1 2 3)
 psql_versions=(12 13 14 15) # Supported Postgresql Versions
 psql_listen_addresses_options=(0 1 2 3 4)
+psql_summary_vars=(input_psql_listen_addresses_val input_psql_listen_addresses_num_ips input_psql_listen_addresses input_psql_port_num input_psql_shared_buffers input_psql_max_connections input_psql_version input_mode)
+psql_summary_os_info=(UBUNTU_CODENAME PRIVACY_POLICY_URL BUG_REPORT_URL SUPPORT_URL HOME_URL ID_LIKE ID VERSION_CODENAME VERSION VERSION_ID NAME PRETTY_NAME)
 psql_shared_buffers_array=($input_psql_shared_buffers) # Postgresql array value for "shared_buffers" parameter
 ###############################
 # Echo Messages               #
@@ -50,9 +59,18 @@ terminalColorWarning='\033[1;34m'
 # Start Functions Section     #
 ###############################
 
-# Function to get operating system details
-f_get_os_info() {
-    . /etc/os-release 
+# Function to get variables from an array of string var names and pass each name and var to another function
+f_get_var_from_array_fap() {
+    declare -a _list=("${!1}")
+    fap=${2} # Function to pass a parameter to this function
+    shift;
+    i=$((${#_list[@]}-1))
+    while [ "$i" -le "${#_list[@]}" ] && [ "$i" -ge 0 ]; do
+        var="${_list[$i]}"
+        $@ "${_list[$i]}" "${!_list[$i]}"  
+        i=$(( i - 1 ))
+    done
+
 }
 
 # Function to format terminal font for string
@@ -74,6 +92,8 @@ f_messages() {
     msg_output=$response_type"_"${msg_code}
     msg_tab='\t\t'
     msg_nl="\n$msg_tab"
+    msg_hl="$(printf '%*s\n' "${COLUMNS:-$(tput cols)}" '' | tr ' ' -)"
+    
     # Messages
     msg_1000000="What version of postgresql do you want to install?\nEnter version as an integer value or press enter to use Default value.${msg_nl}Default: [ $(f_terminal_font "message" "${3}") ]"
     msg_1000001="${msg_tab}Postgresql version [ $(f_terminal_font "success" "${3}") ]"
@@ -91,6 +111,7 @@ f_messages() {
     msg_1000013="$(f_terminal_font "message" "Supported Operating Systems: ")$(f_terminal_font "success" "${msg_nl}${3}")"
     msg_1000014="${msg_nl}${msg_tab}$(f_terminal_font "message" "Release: ")$(f_terminal_font "success" "${3}")"
     msg_1000015="Enter an interger value for postgresql 'port' number parameter or press enter to use Default value.${msg_nl}Example: [ $(f_terminal_font "success" "${3}") ]${msg_nl}Default value: [ $(f_terminal_font "success" "${4}") ]"
+    
     # Errors
     error_prefix=$(f_terminal_font "error" "ERROR: [ ${msg_code} ] ")
     error_1000000=${error_prefix}"This script must be run as root user or using sudo.""\nThe script is now exiting."
@@ -106,11 +127,13 @@ f_messages() {
     error_1000010=${error_prefix}"$(f_terminal_font "success" "${3}") version $(f_terminal_font "error" "${4}") is not supported by this script. \nOS: $(f_terminal_font "success" "${3}") \n Version: $(f_terminal_font "error" "${4}") \nExiting script."
     error_1000011=${error_prefix}"An existing installed version of Postgresql was detected.\n${3}\nPlease uninstall current instance of Postgresql and rerun this script.\nExiting script."
     error_1000012=${error_prefix}"$(f_terminal_font "warning" "${3}") is not a valid value for max_connections."
+    
     # Warnings
+    
     # Help Messages
     help_prefix="\n"$(f_terminal_font "success" "${3}")
-    help_desc=$msg_tab$(f_terminal_font "message" "Description: ")
-    help_syntax=$(f_terminal_font "message" "Syntax: ")
+    help_desc="${msg_tab}$(f_terminal_font "message" "Description: ")"
+    help_syntax="$(f_terminal_font "message" "Syntax: ")"
     help_1000000="This script will install and configure preferred postgresql version on variety of Linux distros.\n\nOptions:"
     help_1000001=${help_prefix}"${help_desc} This option does not take any values and will simply run the script in interactive mode.$msg_nl$help_syntax ${3}"
     help_1000002=${help_prefix}"${help_desc} This options sets the value for postgresql version.  This option accepts a single value as an integer.$msg_nl$help_syntax ${3} 14"
@@ -122,14 +145,17 @@ f_messages() {
     help_1000008=${help_prefix}"${help_desc} This option displays the help text.$msg_nl${help_syntax} ${3}"
     help_1000009=${help_prefix}"${help_desc} This option will display all postgresql versions supported by this script.$msg_nl$help_syntax ${3}"
     help_1000010=${help_prefix}"${help_desc} This option will display all operating systems and versions versions supported by this script.$msg_nl$help_syntax ${3}"
+    
     # Summary Messages
     summary_var="$(f_terminal_font "message" "${3}=")$(f_terminal_font "success" "${4}=")"
-    summary_header_pre="$(f_terminal_font success $(printf "%0.s_" {1..64}))\n"
-    summary_header_suf="\n$(f_terminal_font success $(printf "%0.s_" {1..64}))"
-    summary_subheader_pre="$(f_terminal_font success $(printf "%0.s_" {1..64}))\n"
-    summary_subheader_suf="\n$(f_terminal_font success $(printf "%0.s_" {1..64}))"
-    summary_1000000="${summary_header_pre}\n${msg_tab}$(f_terminal_font message "${3}")${summary_header_suf}"
-    summary_1000001="${summary_subheader_pre}\n${msg_tab}${3}${summary_subheader_suf}"
+    summary_header_pre="$(f_terminal_font success ${msg_hl})\n"
+    summary_header_suf="\n$(f_terminal_font success ${msg_hl})"
+    summary_subheader_pre="$(f_terminal_font success ${msg_hl})\n"
+    summary_subheader_suf="\n$(f_terminal_font success ${msg_hl})"
+    summary_header="${summary_header_pre}${msg_tab}$(f_terminal_font success "${3}")${summary_header_suf}"
+    summary_subheader="${summary_subheader_pre}${msg_tab}$(f_terminal_font success "${3}")${summary_subheader_suf}"
+    summary_listitem="${msg_tab}$(f_terminal_font message "${4}")$(f_terminal_font warning "${3}")$(f_terminal_font success "${5}")${summary_subheader_suf}"
+
     # Echo Message
     echo -e ${!msg_output}
 }
@@ -137,6 +163,36 @@ f_messages() {
 # Function to get total installed system memory
 f_get_sys_mem() {
     grep MemTotal /proc/meminfo | awk '{print $2}'
+}
+
+function x()      { echo "x(): Passed $1 and $2";  }
+function around() { echo before; "$@"; echo after; }
+
+# Function to see if item is in list and executes another function passed as a parameter
+f_loop_for_func() {
+    local list=$1
+
+    for item in ${list[@]}; do
+        "$@"
+    done
+}
+
+# Function for yes / no inputs
+f_is_yes_no () {
+    shopt -s nocasematch
+    input_yes=(y yes)
+    input_no=(n no)
+    if [[ "${input_yes[@]}" =~ "${i}" ]];
+    then
+        return 0
+    elif [[ "${input_no[@]}" =~ "${i}" ]];
+    then
+        return 1
+    else
+        return 2
+    fi
+
+    shopt -u nocasematch 
 }
 
 # Function to check if variable is null
@@ -370,6 +426,7 @@ option_help() {
 ############################
 # Program Functions        #
 ############################
+
 # Function to get variables from user in interactive or cli mode
 f_app_input_vars() {
     if [[ $input_mode == "interactive" ]] ;
@@ -520,7 +577,6 @@ f_app_input_psql_listen_address() {
         var_ip_num=(${!input_psql_listen_addresses_num_ips@})
         f_messages msg 1000009
         f_app_input_vars $var_ip_num
-
         while true; do
             if ! f_verify_integer $input_psql_listen_addresses_num_ips;
             then
@@ -562,7 +618,7 @@ f_app_input_psql_listen_address() {
             i=$(( i - 1 ))
         done
         input_psql_listen_addresses_val_list_csv=$(f_array_as_del , ${input_psql_listen_addresses_val_list[*]})
-
+        input_psql_listen_addresses_val=$input_psql_listen_addresses_val_list_csv
     elif f_is_var_null $input_psql_listen_addresses;
     then
         input_psql_listen_addresses=$psql_listen_addresses_options_default
@@ -573,9 +629,18 @@ f_app_input_psql_listen_address() {
 
 # Function to print summary / log
 f_app_summary() {
-    f_messages summary 1000000 "Summary Log"
-    f_messages summary 1000001 "OS Information:"
+    f_messages summary header "Summary Log"
+    f_messages summary subheader "OS Information:"
+    f_get_var_from_array_fap psql_summary_os_info[@] "f_messages" "summary" "listitem" "="
+    f_messages summary subheader "User Input Values:"
+    f_get_var_from_array_fap psql_summary_vars[@] "f_messages" "summary" "listitem" "="
+    
 
+}
+
+# Function to review summary and confirm continue
+f_app_summary_review() {
+    
 }
 
 #########################
@@ -585,9 +650,6 @@ f_app_summary() {
 # Variables - Functions
 postgresql_hba_conf_file=$(f_get_path_pg_hba_conf) # Path to postgresql pg_hba.conf file
 postgresql_conf_file=$(f_get_path_postgresql_conf) # Path to postgresql postgres.conf
-
-# Load info for operating system
-f_get_os_info
 
 # Check if script is being run by root or sudo user
 if ! f_is_root;
@@ -629,7 +691,9 @@ f_app_input_psql_port $input_psql_port_num $psql_port_num_default
 # Get parameter value for [ listen_addresses ]
 f_app_input_psql_listen_address
 
+########################################
+# Print Summary Log                    #
+########################################
 # Create summary
 f_app_summary
-
 
